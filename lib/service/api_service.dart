@@ -27,60 +27,64 @@ class ApiService {
   /// ============================
   /// 👤 GET CURRENT USER
   /// ============================
-  static Future<Map<String, dynamic>> getCurrentUser() async {
-    final token = await _getToken();
+static Future<Map<String, dynamic>> getCurrentUser(String token) async {
+  final res = await http.get(
+    Uri.parse("$baseUrl/api/me"),
+    headers: {
+      "Authorization": "Bearer $token",
+    },
+  );
 
-    final res = await http.get(
-      Uri.parse("$baseUrl/api/me"),
-      headers: {
-        "Authorization": "Bearer $token",
-      },
-    );
-
-    if (res.statusCode != 200) {
-      throw Exception("Failed to fetch user: ${res.body}");
-    }
-
-    return jsonDecode(res.body);
+  if (res.statusCode != 200) {
+    throw Exception("Failed to fetch user: ${res.body}");
   }
 
+  return jsonDecode(res.body);
+}
   /// ============================
   /// 📸 MARK ATTENDANCE
   /// ============================
-  static Future<Map<String, dynamic>> markAttendance({
-    required int employeeId,
-    required double lat,
-    required double lng,
-    required String imagePath,
-  }) async {
-    try {
-      final token = await _getToken();
+  
+static Future<Map<String, dynamic>> markAttendance({
+  required int employeeId,
+  required double lat,
+  required double lng,
+  required String imagePath,
+}) async {
+  final user = FirebaseAuth.instance.currentUser;
 
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse("$baseUrl/api/attendance/mark"),
-      );
-
-      request.headers['Authorization'] = "Bearer $token";
-
-      request.fields['employee_id'] = employeeId.toString();
-      request.fields['lat'] = lat.toString();
-      request.fields['lng'] = lng.toString();
-
-      request.files.add(
-        await http.MultipartFile.fromPath('image', imagePath),
-      );
-
-      var response = await request.send();
-      final responseBody = await response.stream.bytesToString();
-
-      if (response.statusCode == 200) {
-        return jsonDecode(responseBody);
-      } else {
-        throw Exception("API Error: $responseBody");
-      }
-    } catch (e) {
-      throw Exception("Attendance Failed: $e");
-    }
+  if (user == null) {
+    throw Exception("User not logged in");
   }
+
+  final token = await user.getIdToken();
+
+  final request = http.MultipartRequest(
+    'POST',
+    Uri.parse("$baseUrl/api/Attendance/mark"),
+  );
+
+  // 🔥 ADD TOKEN (THIS WAS MISSING)
+  request.headers['Authorization'] = 'Bearer $token';
+
+  request.fields['employee_id'] = employeeId.toString();
+  request.fields['lat'] = lat.toString();
+  request.fields['lng'] = lng.toString();
+
+  request.files.add(
+    await http.MultipartFile.fromPath('image', imagePath),
+  );
+
+  final response = await request.send();
+  final resBody = await response.stream.bytesToString();
+
+  print("🔥 STATUS: ${response.statusCode}");
+  print("🔥 BODY: $resBody");
+
+  if (response.statusCode == 200) {
+    return jsonDecode(resBody);
+  } else {
+    throw Exception("API Error: $resBody");
+  }
+}
 }
