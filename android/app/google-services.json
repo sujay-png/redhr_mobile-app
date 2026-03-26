@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "354362186297",
+    "project_id": "hrcrm-5990f",
+    "storage_bucket": "hrcrm-5990f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:354362186297:android:6a415aba24f9202e0c8be8",
+        "android_client_info": {
+          "package_name": "com.rd.hrcrm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyADxOIZZEt4-BD_IJLVtzi7eXq2VRvN_oA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
