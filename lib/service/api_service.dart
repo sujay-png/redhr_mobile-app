@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -88,5 +89,35 @@ static Future<Map<String, dynamic>> markAttendance({
       throw Exception("Failed to fetch status: ${res.body}");
     }
     return jsonDecode(res.body);
+  }
+
+
+  /// ============================
+  /// 📝 SUBMIT DAILY REPORT
+  /// ============================
+  static Future<bool> submitDailyReport({
+    required String tasks,
+    required String challenges,
+  }) async {
+    try {
+      final token = await _getToken();
+      
+      final response = await http.post(
+        Uri.parse("$baseUrl/api/daily-reports"),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "todays_tasks": tasks,
+          "challenges": challenges,
+        }),
+      );
+
+      return response.statusCode == 201;
+    } catch (e) {
+      debugPrint("Submit Report Error: $e");
+      return false;
+    }
   }
 }

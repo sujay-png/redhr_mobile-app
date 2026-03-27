@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:redhr_mobile_app/service/api_service.dart';
+
 
 class DailyReportScreen extends StatefulWidget {
   const DailyReportScreen({super.key});
@@ -11,7 +13,41 @@ class DailyReportScreenState extends State<DailyReportScreen> {
   final Color primaryTeal = const Color(0xFF0C5D6B);
   final TextEditingController focusController = TextEditingController();
   final TextEditingController challengeController = TextEditingController();
-  String? selectedDuration;
+  bool isSubmitting = false;
+
+  Future<void> submitReport() async {
+    if (focusController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter today's focus")),
+      );
+      return;
+    }
+
+    setState(() => isSubmitting = true);
+
+    try {
+      final success = await ApiService.submitDailyReport(
+        tasks: focusController.text.trim(),
+        challenges: challengeController.text.trim(),
+      );
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Report submitted successfully!")),
+        );
+        focusController.clear();
+        challengeController.clear();
+      } else {
+        throw Exception("Failed to submit report");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: ${e.toString()}")),
+      );
+    } finally {
+      setState(() => isSubmitting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,11 +56,11 @@ class DailyReportScreenState extends State<DailyReportScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: const Icon(Icons.person_outline, color: Colors.black),
-        title: const Text("Welcome back", style: TextStyle(color: Color(0xFF0C5D6B), fontSize: 18, fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none, color: Colors.black))
-        ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text("Daily Submission", style: TextStyle(color: Color(0xFF0C5D6B), fontSize: 18, fontWeight: FontWeight.bold)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -33,7 +69,6 @@ class DailyReportScreenState extends State<DailyReportScreen> {
           children: [
             const Text("SUBMISSION PORTAL", style: TextStyle(color: Colors.grey, letterSpacing: 1.2, fontSize: 12, fontWeight: FontWeight.bold)),
             const Text("Daily Report", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF0C5D6B))),
-            Text("Wednesday, October 25, 2023", style: TextStyle(color: Colors.grey.shade600)),
             const SizedBox(height: 30),
 
             reportFieldTitle("Today's Focus"),
@@ -44,26 +79,16 @@ class DailyReportScreenState extends State<DailyReportScreen> {
             reportFieldTitle("Challenges Encountered"),
             reportTextArea("Describe any blockers or difficulties...", challengeController),
 
-          
             const SizedBox(height: 30),
             
-            // Pro-tip Card
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE0F2F1),
-                borderRadius: BorderRadius.circular(12),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFFE0F2F1), borderRadius: BorderRadius.circular(12)),
               child: const Row(
                 children: [
                   Icon(Icons.lightbulb_outline, color: Color(0xFF0C5D6B)),
                   SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      "Pro-tip: Detailed reports help the leadership team identify recurring bottlenecks.",
-                      style: TextStyle(fontSize: 12, color: Color(0xFF0C5D6B)),
-                    ),
-                  )
+                  Expanded(child: Text("Pro-tip: Detailed reports help the leadership team identify recurring bottlenecks.", style: TextStyle(fontSize: 12, color: Color(0xFF0C5D6B)))),
                 ],
               ),
             ),
@@ -71,22 +96,22 @@ class DailyReportScreenState extends State<DailyReportScreen> {
             const SizedBox(height: 20),
 
             ElevatedButton(
-              onPressed: () {
-                // Logic to submit to Supabase/MariaDB
-              },
+              onPressed: isSubmitting ? null : submitReport,
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryTeal,
                 minimumSize: const Size(double.infinity, 56),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text("Submit Report", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                  SizedBox(width: 10),
-                  Icon(Icons.send, size: 18, color: Colors.white),
-                ],
-              ),
+              child: isSubmitting 
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text("Submit Report", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                      SizedBox(width: 10),
+                      Icon(Icons.send, size: 18, color: Colors.white),
+                    ],
+                  ),
             ),
           ],
         ),
@@ -107,7 +132,6 @@ class DailyReportScreenState extends State<DailyReportScreen> {
       maxLines: 4,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
         filled: true,
         fillColor: const Color(0xFFF3F4F6),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
