@@ -39,7 +39,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
 
       // 🔥 4. Store employee_id
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt("employee_id", user['id']);
+      await prefs.setInt("employee_id", user['employee_id']);
 
       // 🔥 5. Navigate (FIXED)
       context.go('/home');
