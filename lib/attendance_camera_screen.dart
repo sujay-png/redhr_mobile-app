@@ -251,18 +251,14 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
     setState(() => _isCapturing = true);
 
     try {
-      // ✅ Ensure camera ready
       await _initializeControllerFuture;
 
-      // 📍 Get precise location
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // 📸 Capture image
       final XFile image = await _controller!.takePicture();
 
-      // 🔥 Get employee_id from local storage
       final prefs = await SharedPreferences.getInstance();
       final employeeId = prefs.getInt("employee_id");
 
@@ -270,14 +266,13 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
         throw Exception("Employee ID not found. Please login again.");
       }
 
-      // 🔍 Debug logs
+
       print("--- ATTENDANCE LOG ---");
       print("Employee ID: $employeeId");
       print("Image Path: ${image.path}");
       print("Lat: ${position.latitude}");
       print("Lng: ${position.longitude}");
 
-      // 🚀 Call API
       final res = await ApiService.markAttendance(
         employeeId: employeeId,
         lat: position.latitude,
@@ -289,7 +284,6 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
 
       if (!mounted) return;
 
-      
       // Show the success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

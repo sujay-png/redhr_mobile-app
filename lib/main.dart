@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:redhr_mobile_app/auth/login.dart';
 import 'package:redhr_mobile_app/homepage.dart';
 import 'package:redhr_mobile_app/nav/shell.dart';
-import 'package:redhr_mobile_app/attendance_camera_screen.dart'; 
+import 'package:redhr_mobile_app/attendance_camera_screen.dart';
+import 'package:redhr_mobile_app/reports.dart'; 
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,7 +63,7 @@ class MainApp extends StatelessWidget {
             routes: [
               GoRoute(
                 path: '/reports',
-                builder: (context, state) => const Scaffold(body: Center(child: Text("Reports"))),
+                builder: (context, state) => const DailyReportScreen(),
               ),
             ],
           ),
