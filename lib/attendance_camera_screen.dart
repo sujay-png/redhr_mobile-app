@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:redhr_mobile_app/service/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -247,71 +248,72 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
   }
 
   Future<void> _handleCapture() async {
-  setState(() => _isCapturing = true);
+    setState(() => _isCapturing = true);
 
-  try {
-    // ✅ Ensure camera ready
-    await _initializeControllerFuture;
+    try {
+      // ✅ Ensure camera ready
+      await _initializeControllerFuture;
 
-    // 📍 Get precise location
-    final position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
+      // 📍 Get precise location
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
 
-    // 📸 Capture image
-    final XFile image = await _controller!.takePicture();
+      // 📸 Capture image
+      final XFile image = await _controller!.takePicture();
 
-    // 🔥 Get employee_id from local storage
-    final prefs = await SharedPreferences.getInstance();
-    final employeeId = prefs.getInt("employee_id");
+      // 🔥 Get employee_id from local storage
+      final prefs = await SharedPreferences.getInstance();
+      final employeeId = prefs.getInt("employee_id");
 
-    if (employeeId == null) {
-      throw Exception("Employee ID not found. Please login again.");
+      if (employeeId == null) {
+        throw Exception("Employee ID not found. Please login again.");
+      }
+
+      // 🔍 Debug logs
+      print("--- ATTENDANCE LOG ---");
+      print("Employee ID: $employeeId");
+      print("Image Path: ${image.path}");
+      print("Lat: ${position.latitude}");
+      print("Lng: ${position.longitude}");
+
+      // 🚀 Call API
+      final res = await ApiService.markAttendance(
+        employeeId: employeeId,
+        lat: position.latitude,
+        lng: position.longitude,
+        imagePath: image.path,
+      );
+
+      print("✅ API RESPONSE: $res");
+
+      if (!mounted) return;
+
+      // ✅ SUCCESS UI
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? "Attendance Marked"),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+
+      context.go('/home');
+    } catch (e) {
+      print("❌ ERROR: $e");
+
+      if (!mounted) return;
+
+      // ❌ ERROR UI
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Failed to mark attendance"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isCapturing = false);
     }
-
-    // 🔍 Debug logs
-    print("--- ATTENDANCE LOG ---");
-    print("Employee ID: $employeeId");
-    print("Image Path: ${image.path}");
-    print("Lat: ${position.latitude}");
-    print("Lng: ${position.longitude}");
-
-    // 🚀 Call API
-    final res = await ApiService.markAttendance(
-      employeeId: employeeId,
-      lat: position.latitude,
-      lng: position.longitude,
-      imagePath: image.path,
-    );
-
-    print("✅ API RESPONSE: $res");
-
-    if (!mounted) return;
-
-    // ✅ SUCCESS UI
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(res['message'] ?? "Attendance Marked"),
-        backgroundColor: Colors.green,
-      ),
-    );
-
-    Navigator.pop(context);
-
-  } catch (e) {
-    print("❌ ERROR: $e");
-
-    if (!mounted) return;
-
-    // ❌ ERROR UI
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Failed to mark attendance"),
-        backgroundColor: Colors.red,
-      ),
-    );
-
-  } finally {
-    if (mounted) setState(() => _isCapturing = false);
   }
-}}
+}
