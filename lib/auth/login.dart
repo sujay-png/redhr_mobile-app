@@ -33,7 +33,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
       print("🔥 Firebase Token: $token");
 
       // 🔥 3. Call backend WITH TOKEN
-      final user = await ApiService.getCurrentUser(token!);
+      final user = await ApiService.getMe();
 
       print("👤 Employee Data: $user");
 

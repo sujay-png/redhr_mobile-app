@@ -6,80 +6,66 @@ class ApiService {
   static const String baseUrl = "https://api.hr.rd-crm.in";
 
   /// ============================
-  /// 🔐 GET FIREBASE TOKEN
+  /// 🔐 GET FIREBASE TOKEN (Private Helper)
   /// ============================
   static Future<String> _getToken() async {
     final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      throw Exception("User not logged in");
-    }
-
+    if (user == null) throw Exception("User not logged in");
+    
     final token = await user.getIdToken();
-
-    if (token == null) {
-      throw Exception("Token not found");
-    }
-
+    if (token == null) throw Exception("Token not found");
+    
     return token;
   }
 
   /// ============================
-  /// 👤 GET CURRENT USER
+  /// 👤 GET CURRENT USER (Internal Profile)
   /// ============================
-static Future<Map<String, dynamic>> getCurrentUser(String token) async {
-  final res = await http.get(
-    Uri.parse("$baseUrl/api/me"),
-    headers: {
-      "Authorization": "Bearer $token",
-    },
-  );
+  static Future<Map<String, dynamic>> getMe() async {
+    final token = await _getToken();
+    final res = await http.get(
+      Uri.parse("$baseUrl/api/me"),
+      headers: {
+        "Authorization": "Bearer $token",
+      },
+    );
 
-  if (res.statusCode != 200) {
-    throw Exception("Failed to fetch user: ${res.body}");
+    if (res.statusCode != 200) {
+      throw Exception("Failed to fetch user: ${res.body}");
+    }
+
+    return jsonDecode(res.body);
   }
 
-  return jsonDecode(res.body);
-}
   /// ============================
   /// 📸 MARK ATTENDANCE
   /// ============================
-  
 static Future<Map<String, dynamic>> markAttendance({
   required int employeeId,
   required double lat,
   required double lng,
-  required String imagePath,
+  String imagePath = "", // Make this optional
 }) async {
-  final user = FirebaseAuth.instance.currentUser;
-
-  if (user == null) {
-    throw Exception("User not logged in");
-  }
-
-  final token = await user.getIdToken();
+  final token = await _getToken();
 
   final request = http.MultipartRequest(
     'POST',
     Uri.parse("$baseUrl/api/Attendance/mark"),
   );
 
-  // 🔥 ADD TOKEN (THIS WAS MISSING)
   request.headers['Authorization'] = 'Bearer $token';
-
   request.fields['employee_id'] = employeeId.toString();
   request.fields['lat'] = lat.toString();
   request.fields['lng'] = lng.toString();
 
-  request.files.add(
-    await http.MultipartFile.fromPath('image', imagePath),
-  );
+  if (imagePath.isNotEmpty) {
+    request.files.add(
+      await http.MultipartFile.fromPath('image', imagePath),
+    );
+  }
 
   final response = await request.send();
   final resBody = await response.stream.bytesToString();
-
-  print("🔥 STATUS: ${response.statusCode}");
-  print("🔥 BODY: $resBody");
 
   if (response.statusCode == 200) {
     return jsonDecode(resBody);
@@ -87,4 +73,20 @@ static Future<Map<String, dynamic>> markAttendance({
     throw Exception("API Error: $resBody");
   }
 }
+
+  /// ============================
+  /// ⏳ FETCH ATTENDANCE STATUS
+  /// ============================
+  static Future<Map<String, dynamic>> getAttendanceStatus(String token) async {
+    final token = await _getToken();
+    final res = await http.get(
+      Uri.parse("$baseUrl/api/Attendance/status"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+    
+    if (res.statusCode != 200) {
+      throw Exception("Failed to fetch status: ${res.body}");
+    }
+    return jsonDecode(res.body);
+  }
 }

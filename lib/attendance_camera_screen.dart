@@ -289,7 +289,8 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
 
       if (!mounted) return;
 
-      // ✅ SUCCESS UI
+      
+      // Show the success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(res['message'] ?? "Attendance Marked"),
@@ -297,9 +298,11 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
           duration: const Duration(seconds: 2),
         ),
       );
-
-
-      context.go('/home');
+      if (context.canPop()) {
+        context.pop(true);
+      } else {
+        context.go('/home');
+      }
     } catch (e) {
       print("❌ ERROR: $e");
 
