@@ -21,27 +21,26 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
     setState(() => loading = true);
 
     try {
-      // 🔥 1. Firebase Login
+
       final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
 
-      // 🔥 2. Get token
       final token = await cred.user!.getIdToken();
 
       print("🔥 Firebase Token: $token");
 
-      // 🔥 3. Call backend WITH TOKEN
+  
       final user = await ApiService.getMe();
 
       print("👤 Employee Data: $user");
 
-      // 🔥 4. Store employee_id
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt("employee_id", user['employee_id']);
 
-      // 🔥 5. Navigate (FIXED)
+
       context.go('/home');
     } catch (e) {
       print("❌ Login Error: $e");

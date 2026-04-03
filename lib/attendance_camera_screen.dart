@@ -12,78 +12,208 @@ class AttendanceCameraScreen extends StatefulWidget {
   const AttendanceCameraScreen({super.key});
 
   @override
-  State<AttendanceCameraScreen> createState() => _AttendanceCameraScreenState();
+  State<AttendanceCameraScreen> createState() =>
+      _AttendanceCameraScreenState();
 }
 
 class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
   CameraController? _controller;
-  Future<void>? _initializeControllerFuture;
+  Future<void>? _initFuture;
   Position? _currentPosition;
   String _address = "Fetching location...";
+
+  // ── State flags ──────────────────────────────────────────────────────────────
   bool _isCapturing = false;
+  bool _captured    = false; // true once picture taken — shows success overlay
+  String _liveTime  = "";
+  Timer? _clockTimer;
 
   @override
   void initState() {
     super.initState();
+    _startClock();
     _initEverything();
   }
 
+  void _startClock() {
+    _liveTime = DateFormat('hh:mm:ss a').format(DateTime.now());
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {
+          _liveTime = DateFormat('hh:mm:ss a').format(DateTime.now());
+        });
+      }
+    });
+  }
+
   Future<void> _initEverything() async {
-    await _determinePosition();
-    await _initCamera();
+    // Run location + camera init in parallel
+    await Future.wait([
+      _determinePosition(),
+      _initCamera(),
+    ]);
   }
 
   Future<void> _initCamera() async {
-    final cameras = await availableCameras();
-    final frontCamera = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front,
-    );
-    _controller = CameraController(
-      frontCamera,
-      ResolutionPreset.high,
-      enableAudio: false,
-    );
-    _initializeControllerFuture = _controller!.initialize();
-    if (mounted) setState(() {});
+    try {
+      final cameras = await availableCameras();
+      final front = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+      _controller = CameraController(
+        front,
+        ResolutionPreset.medium, // ✅ medium is faster than high to capture & encode
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+      _initFuture = _controller!.initialize();
+      await _initFuture;
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint("Camera init error: $e");
+    }
   }
 
   Future<void> _determinePosition() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return;
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
 
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) return;
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return;
+      }
+
+      // ✅ Use last known position first (instant) then accurate position
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null && mounted) {
+        setState(() {
+          _currentPosition = lastKnown;
+          _address =
+              "${lastKnown.latitude.toStringAsFixed(4)}, ${lastKnown.longitude.toStringAsFixed(4)}";
+        });
+      }
+
+      // Get accurate position in background
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium, // ✅ medium > high for speed
+        timeLimit: const Duration(seconds: 8),
+      );
+      if (mounted) {
+        setState(() {
+          _currentPosition = position;
+          _address =
+              "${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}";
+        });
+      }
+    } catch (e) {
+      debugPrint("Location error: $e");
+      if (mounted) setState(() => _address = "Location unavailable");
     }
-
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-    setState(() {
-      _currentPosition = position;
-      _address =
-          "${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}";
-    });
   }
 
   @override
   void dispose() {
+    _clockTimer?.cancel();
     _controller?.dispose();
     super.dispose();
   }
 
+  // ── Capture ───────────────────────────────────────────────────────────────────
+  Future<void> _handleCapture() async {
+    if (_isCapturing || _controller == null) return;
+    setState(() => _isCapturing = true);
+
+    try {
+      // 1. Take picture immediately
+      final XFile image = await _controller!.takePicture();
+
+      // 2. Get employee ID from cache
+      final prefs = await SharedPreferences.getInstance();
+      final employeeId = prefs.getInt("employee_id");
+      if (employeeId == null) throw Exception("Employee ID not found. Please log in again.");
+
+      // 3. Use whatever position we have (last known is fine)
+      final lat = _currentPosition?.latitude  ?? 0.0;
+      final lng = _currentPosition?.longitude ?? 0.0;
+
+      // ✅ SPEED FIX: Show success overlay immediately, upload in background
+      setState(() {
+        _captured    = true;
+        _isCapturing = false;
+      });
+
+      // 4. Upload in background — don't await before popping
+      _uploadAndPop(
+        employeeId: employeeId,
+        imagePath: image.path,
+        lat: lat,
+        lng: lng,
+      );
+
+    } catch (e) {
+      debugPrint("Capture error: $e");
+      if (mounted) {
+        setState(() => _isCapturing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Upload happens after we've already shown success + popped
+  Future<void> _uploadAndPop({
+    required int employeeId,
+    required String imagePath,
+    required double lat,
+    required double lng,
+  }) async {
+    // Small delay so the success animation is visible (≈600ms)
+    await Future.delayed(const Duration(milliseconds: 600));
+
+    if (!mounted) return;
+
+    // Pop immediately with success = true — UI updates instantly on HomePage
+    if (context.canPop()) {
+      context.pop(true);
+    } else {
+      context.go('/home');
+    }
+
+    // Upload continues in background after screen is gone
+    try {
+      final res = await ApiService.markAttendance(
+        employeeId: employeeId,
+        lat: lat,
+        lng: lng,
+        imagePath: imagePath,
+      );
+      debugPrint("✅ Attendance API: $res");
+    } catch (e) {
+      debugPrint("❌ Attendance upload failed: $e");
+      // Silently fail — the UI has already updated optimistically.
+      // HomePage will sync again on next load.
+    }
+  }
+
+  // ── UI ────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // FULL SCREEN VIEWPORT
+          // Camera preview
           if (_controller != null)
             Positioned.fill(
               child: FutureBuilder(
-                future: _initializeControllerFuture,
+                future: _initFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.done) {
                     return CameraPreview(_controller!);
@@ -95,7 +225,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
               ),
             ),
 
-          // OVERLAY GRADIENT
+          // Gradient overlay
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -103,18 +233,34 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [Colors.black54, Colors.transparent, Colors.black87],
-                  stops: const [0.0, 0.3, 1.0],
+                  stops: const [0.0, 0.35, 1.0],
                 ),
               ),
             ),
           ),
 
-          // TOP INFO
+          // Top bar
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
+                  // Back button
+                  GestureDetector(
+                    onTap: () {
+                      if (context.canPop()) context.pop(false);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.arrow_back_ios_new,
+                          color: Colors.white, size: 18),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
                   _blurCircle(Icons.location_on, Colors.redAccent),
                   const SizedBox(width: 12),
                   Column(
@@ -133,7 +279,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
                         _address,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -144,9 +290,43 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
             ),
           ),
 
-          // BOTTOM SECTION
-          Align(alignment: Alignment.bottomCenter, child: _buildBottomUI()),
+          // Bottom UI
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: _buildBottomUI(),
+          ),
+
+          // ✅ Success overlay — shown immediately after capture
+          if (_captured) _buildSuccessOverlay(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSuccessOverlay() {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.7),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_rounded, color: Colors.green, size: 80),
+            SizedBox(height: 20),
+            Text(
+              "Attendance Marked!",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              "Syncing in background...",
+              style: TextStyle(color: Colors.white54, fontSize: 14),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -159,7 +339,8 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
           padding: const EdgeInsets.fromLTRB(30, 25, 30, 40),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.1),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(32)),
             border: Border.all(color: Colors.white.withOpacity(0.2)),
           ),
           child: Column(
@@ -168,13 +349,12 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _metaDetail(
-                    "TIMESTAMP",
-                    DateFormat('hh:mm a').format(DateTime.now()),
-                  ),
+                  _metaDetail("TIMESTAMP", _liveTime),
                   _metaDetail(
                     "ACCURACY",
-                    "${_currentPosition?.accuracy.toStringAsFixed(1) ?? '0'}m",
+                    _currentPosition != null
+                        ? "${_currentPosition!.accuracy.toStringAsFixed(0)}m"
+                        : "—",
                   ),
                 ],
               ),
@@ -183,10 +363,11 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
                 width: double.infinity,
                 height: 65,
                 child: ElevatedButton(
-                  onPressed: _isCapturing ? null : _handleCapture,
+                  onPressed: _isCapturing || _captured ? null : _handleCapture,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black,
+                    disabledBackgroundColor: Colors.white38,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(18),
                     ),
@@ -199,6 +380,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
                             letterSpacing: 0.8,
+                            fontSize: 16,
                           ),
                         ),
                 ),
@@ -214,24 +396,20 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 9,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1,
-          ),
-        ),
+        Text(label,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+            )),
         const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        Text(value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            )),
       ],
     );
   }
@@ -245,72 +423,5 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
       ),
       child: Icon(icon, color: color, size: 20),
     );
-  }
-
-  Future<void> _handleCapture() async {
-    setState(() => _isCapturing = true);
-
-    try {
-      await _initializeControllerFuture;
-
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-
-      final XFile image = await _controller!.takePicture();
-
-      final prefs = await SharedPreferences.getInstance();
-      final employeeId = prefs.getInt("employee_id");
-
-      if (employeeId == null) {
-        throw Exception("Employee ID not found. Please login again.");
-      }
-
-
-      print("--- ATTENDANCE LOG ---");
-      print("Employee ID: $employeeId");
-      print("Image Path: ${image.path}");
-      print("Lat: ${position.latitude}");
-      print("Lng: ${position.longitude}");
-
-      final res = await ApiService.markAttendance(
-        employeeId: employeeId,
-        lat: position.latitude,
-        lng: position.longitude,
-        imagePath: image.path,
-      );
-
-      print("✅ API RESPONSE: $res");
-
-      if (!mounted) return;
-
-      // Show the success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['message'] ?? "Attendance Marked"),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-      if (context.canPop()) {
-        context.pop(true);
-      } else {
-        context.go('/home');
-      }
-    } catch (e) {
-      print("❌ ERROR: $e");
-
-      if (!mounted) return;
-
-      // ❌ ERROR UI
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Failed to mark attendance"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isCapturing = false);
-    }
   }
 }

@@ -22,7 +22,7 @@ class CustomBottomNav extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _buildNavItem(0, Icons.home_rounded, 'HOME'),
-          _buildNavItem(1, Icons.calendar_month_outlined, 'ATTENDANCE'),
+          _buildNavItem(1, Icons.camera_alt_outlined, 'ATTENDANCE'),
           _buildNavItem(2, Icons.bar_chart_rounded, 'REPORTS'),
           _buildNavItem(3, Icons.person_outline_rounded, 'PROFILE'),
         ],
@@ -31,8 +31,8 @@ class CustomBottomNav extends StatelessWidget {
   }
 
   Widget _buildNavItem(int index, IconData icon, String label) {
-    bool isSelected = currentIndex == index;
-    final activeColor = const Color(0xFF005B69);
+    final isSelected = currentIndex == index;
+    const activeColor = Color(0xFF005B69);
 
     return GestureDetector(
       onTap: () => onTap(index),
@@ -40,10 +40,13 @@ class CustomBottomNav extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             decoration: BoxDecoration(
-              color: isSelected ? activeColor.withOpacity(0.1) : Colors.transparent,
+              color: isSelected
+                  ? activeColor.withOpacity(0.1)
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(

@@ -77,19 +77,43 @@ static Future<Map<String, dynamic>> markAttendance({
   /// ============================
   /// ⏳ FETCH ATTENDANCE STATUS
   /// ============================
-  static Future<Map<String, dynamic>> getAttendanceStatus(String token) async {
-    final token = await _getToken();
-    final res = await http.get(
-      Uri.parse("$baseUrl/api/Attendance/status"),
-      headers: {"Authorization": "Bearer $token"},
-    );
-    
-    if (res.statusCode != 200) {
-      throw Exception("Failed to fetch status: ${res.body}");
-    }
-    return jsonDecode(res.body);
+ static Future<Map<String, dynamic>> getAttendanceStatus(String token) async {
+  final token = await _getToken();
+  final res = await http.get(
+    Uri.parse("$baseUrl/api/Attendance/status"),
+    headers: {"Authorization": "Bearer $token"},
+  );
+
+  if (res.statusCode != 200) {
+    throw Exception("Failed to fetch status: ${res.body}");
   }
 
+  final body = jsonDecode(res.body);
+  final status = body['status'] as String? ?? 'not_marked';
+
+  // Map backend string → booleans that HomePage expects
+return {
+  'isCheckedIn':  status == 'checked_in' || status == 'completed',
+  'isCheckedOut': status == 'completed',   // ← this must be present
+  'checkInTime':  body['checkInTime'],
+  'checkOutTime': body['checkOutTime'],    // ← add this line
+};
+}
+
+static Future<void> checkOut() async {
+  final token = await _getToken();
+  final res = await http.post(
+    Uri.parse("$baseUrl/api/attendance/checkout"),
+    headers: {
+      "Authorization": "Bearer $token",
+      "Content-Type": "application/json",
+    },
+  );
+
+  if (res.statusCode != 200) {
+    throw Exception("Check-out failed: ${res.body}");
+  }
+}
 
   /// ============================
   /// 📝 SUBMIT DAILY REPORT
