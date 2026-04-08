@@ -24,7 +24,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
 
   // ── State flags ──────────────────────────────────────────────────────────────
   bool _isCapturing = false;
-  bool _captured    = false; // true once picture taken — shows success overlay
+  bool _captured    = false; 
   String _liveTime  = "";
   Timer? _clockTimer;
 
@@ -169,38 +169,32 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen> {
 
   // Upload happens after we've already shown success + popped
   Future<void> _uploadAndPop({
-    required int employeeId,
-    required String imagePath,
-    required double lat,
-    required double lng,
-  }) async {
-    // Small delay so the success animation is visible (≈600ms)
-    await Future.delayed(const Duration(milliseconds: 600));
-
-    if (!mounted) return;
-
-    // Pop immediately with success = true — UI updates instantly on HomePage
-    if (context.canPop()) {
-      context.pop(true);
-    } else {
-      context.go('/home');
-    }
-
-    // Upload continues in background after screen is gone
-    try {
-      final res = await ApiService.markAttendance(
-        employeeId: employeeId,
-        lat: lat,
-        lng: lng,
-        imagePath: imagePath,
-      );
-      debugPrint("✅ Attendance API: $res");
-    } catch (e) {
-      debugPrint("❌ Attendance upload failed: $e");
-      // Silently fail — the UI has already updated optimistically.
-      // HomePage will sync again on next load.
-    }
+  required int employeeId,
+  required String imagePath,
+  required double lat,
+  required double lng,
+}) async {
+  try {
+    final res = await ApiService.markAttendance(
+      lat: lat,
+      lng: lng,
+      imagePath: imagePath,
+    );
+    debugPrint("✅ Attendance API: $res");
+  } catch (e) {
+    debugPrint("❌ Attendance upload failed: $e");
   }
+
+  // ✅ Pop AFTER upload completes
+  await Future.delayed(const Duration(milliseconds: 600));
+  
+  if (!mounted) return;
+  if (context.canPop()) {
+    context.pop(true);
+  } else {
+    context.go('/home');
+  }
+}
 
   // ── UI ────────────────────────────────────────────────────────────────────────
   @override

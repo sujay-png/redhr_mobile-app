@@ -122,7 +122,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       final results = await Future.wait([
         ApiService.getMe(),
-        ApiService.getAttendanceStatus(token),
+        ApiService.getAttendanceStatus(),
       ]);
 
       final profile = results[0];
